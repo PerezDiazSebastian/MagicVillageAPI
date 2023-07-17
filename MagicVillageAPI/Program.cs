@@ -1,3 +1,4 @@
+using MagicVillageAPI;
 using MagicVillageAPI.Datos;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,6 +11,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddControllers().AddNewtonsoftJson();// Se agregan los servicio del NuGet
+builder.Services.AddAutoMapper(typeof(MappingConfig)); //Se agrega la clase donde se hace el mapeo con typeof
 
 builder.Services.AddDbContext<ApplicationDbContext>(option =>
 {

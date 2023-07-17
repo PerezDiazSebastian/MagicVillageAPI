@@ -1,4 +1,5 @@
-﻿using MagicVillageAPI.Datos;
+﻿using AutoMapper;
+using MagicVillageAPI.Datos;
 using MagicVillageAPI.Models;
 using MagicVillageAPI.Models.Dto;
 using Microsoft.AspNetCore.JsonPatch;
@@ -17,10 +18,10 @@ namespace MagicVillageAPI.Controllers
 
         private readonly ILogger<VillageController> _logger; //Las variables privadas llevan guion bajo.
         private readonly ApplicationDbContext _context;//Conexión base de datos
+        private readonly IMapper _mapper;
 
-        
-        
-        public VillageController(ILogger<VillageController> logger, ApplicationDbContext context)
+
+        public VillageController(ILogger<VillageController> logger, ApplicationDbContext context, IMapper mapper)
         {
             _logger = logger; //Inyeccion del servicio de logger, y inicializacion de la variables logger.
             _context = context;
@@ -30,11 +31,16 @@ namespace MagicVillageAPI.Controllers
         // GET: api/<VillageController>
         //Evitar error de documentacion 
         [HttpGet]
-        public ActionResult<IEnumerable<VillageDto>> GetVillages()
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<ActionResult<IEnumerable<VillageDto>>> GetVillagesAsync()
         {
             _logger.LogInformation("Obtener las villas");
-            return Ok(_context.Villages.ToList());
-            //Action resultado como un codigo de consulta cl n iente
+
+            IEnumerable<Village> villageList = await _context.Villages.ToListAsync();
+
+            return Ok(_mapper.Map<IEnumerable<VillageDto>>(villageList));
+
+            //Action resultado como un codigo de consulta cliente
         }
 
         //GET api/<VillageController>/5
@@ -43,24 +49,24 @@ namespace MagicVillageAPI.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public ActionResult<IEnumerable<VillageDto>> GetVillage(int id)
+        public async Task<ActionResult<IEnumerable<VillageDto>>> GetVillage(int id)
         {
 
             if (id == 0)
             {
-                _logger.LogError("Error al mostrar la informacion con el Id"+id);
+                _logger.LogError("Error al mostrar la informacion con el Id" + id);
                 return BadRequest();
             }
 
             //var village = (VillageStore.listVillage.FirstOrDefault(v => v.Id == id)); //Expresion lambda de igualdad
-            var village = _context.Villages.FirstOrDefault(v => v.Id == id);
+            var village = await _context.Villages.FirstOrDefaultAsync(v => v.Id == id);
 
             if (village == null) {
 
                 return NotFound();
             }
 
-            return Ok(village);
+            return Ok(_mapper.Map<VillageDto>(village));
 
         }
 
@@ -69,58 +75,45 @@ namespace MagicVillageAPI.Controllers
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public ActionResult<VillageDto> CrearVillage([FromBody] VillageDto villageDto)
+        public async Task<ActionResult<VillageDto>> CrearVillage([FromBody] VillageCreateDto createDto)
         {
 
 
             if (!ModelState.IsValid) //Validacion de datos del modelo, con propiedad Required.
             {
-                return BadRequest(villageDto);
+                return BadRequest(ModelState);
             }
 
-            if (_context.Villages.FirstOrDefault(v => v.Nombre.ToLower() == villageDto.Nombre.ToLower()) != null) //Validacion de datos del modelo, con propiedad Required.
+            if (await _context.Villages.FirstOrDefaultAsync(v => v.Nombre.ToLower() == createDto.Nombre.ToLower()) != null) //Validacion de datos del modelo, con propiedad Required.
             {
                 ModelState.AddModelError("Villa Existe", "La villa con ese nombre ya existe");
                 return BadRequest(ModelState);
             }
 
 
-            if (villageDto == null)
+            if (createDto == null)
             {
-                return BadRequest(villageDto);
+                return BadRequest(createDto);
             }
 
-            if (villageDto.Id > 0)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError);
-            }
+            Village modelo = _mapper.Map<Village>(createDto);
 
 
-            Village modelo = new()
-            {
-                Nombre = villageDto.Nombre,
-                Detalle = villageDto.Detalle,
-                ImagenUrl = villageDto.ImagenUrl,
-                Ocupantes = villageDto.Ocupantes,
-                Tarifa = villageDto.Tarifa,
-                MetrosCuadros = villageDto.MetrosCuadros
-            };
+            await _context.Villages.AddAsync(modelo);//Insert en la bas
+            await _context.SaveChangesAsync();
 
-            _context.Villages.Add(modelo);//Insert en la base
-            _context.SaveChanges();
-
-            return CreatedAtAction("GetVillage", new { id = villageDto.Id }, villageDto); //Se debe indicar la url del recurso creado
+            return CreatedAtAction("GetVillage", new { id = modelo.Id }, modelo); //Se debe indicar la url del recurso creado
         }
 
         // PUT api/<VillageController>/5
         [HttpPut("{id}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public IActionResult UpdateVillage(int id, [FromBody] VillageDto villageDto)
+        public async Task<IActionResult> UpdateVillage(int id, [FromBody] VillageUpdateDto updateDto)
         {
             //El IActionResult, no necesita el modelo, Delete devuelve un "No content".
 
-            if (villageDto.Id != id || villageDto == null)
+            if (updateDto.Id != id || updateDto == null)
             {
                 return BadRequest();
             }
@@ -131,19 +124,10 @@ namespace MagicVillageAPI.Controllers
             //villa.Ocupantes = villageDto.Ocupantes;
             //villa.MetrosCuadros = villageDto.MetrosCuadros;
 
+            Village modelo = _mapper.Map<Village>(updateDto); //Convierte de un tipo de modelo  otro automaticamente.
 
-            Village modelo = new() //Creaión de un modelo y asignación de valores
-            {
-                Nombre = villageDto.Nombre,
-                Detalle = villageDto.Detalle,
-                ImagenUrl = villageDto.ImagenUrl,
-                Ocupantes = villageDto.Ocupantes,
-                Tarifa = villageDto.Tarifa,
-                MetrosCuadros = villageDto.MetrosCuadros
-            };
-
-            _context.Villages.Update(modelo);
-            _context.SaveChanges();
+            _context.Villages.Update(modelo); //No existe Update Async
+            await _context.SaveChangesAsync();
 
             return NoContent();
 
@@ -154,7 +138,7 @@ namespace MagicVillageAPI.Controllers
         [HttpPatch("{id}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public IActionResult UpdatePartialVillage(int id, JsonPatchDocument <VillageDto> patchDto)
+        public async Task<IActionResult> UpdatePartialVillage(int id, JsonPatchDocument<VillageUpdateDto> patchDto)
         {
             //El IActionResult, no necesita el modelo, Delete devuelve un "No content".
 
@@ -166,22 +150,10 @@ namespace MagicVillageAPI.Controllers
             var village = _context.Villages.AsNoTracking().FirstOrDefault(v => v.Id == id);
             //Problema de tracking, permite consultar un registro sin trackearlo, al usar un registro y volverlo a instanciar.
 
+        
+            VillageUpdateDto villageDto = _mapper.Map<VillageUpdateDto>(village);
 
-            VillageDto villageDto = new() //Crear un modelo de Dto , al estar trabajando con esa clase en el patchDto
-            {
-                Id = village.Id,
-                Nombre = village.Nombre,
-                Detalle = village.Detalle,
-                ImagenUrl = village.ImagenUrl,
-                Ocupantes = village.Ocupantes,
-                Tarifa = village.Tarifa,
-                MetrosCuadros = village.MetrosCuadros
-
-                //Antes de actualizar, se hace una actualizción temporal en el modelo Dto
-                
-            };
-
-            if (villageDto == null)
+            if (village == null)
             {
                 return BadRequest();
             }
@@ -192,21 +164,11 @@ namespace MagicVillageAPI.Controllers
                 return BadRequest();
             }
 
-            Village modelo = new() 
-            {
-                Id = villageDto.Id,
-                Nombre = villageDto.Nombre,
-                Detalle = villageDto.Detalle,
-                ImagenUrl = villageDto.ImagenUrl,
-                Ocupantes = villageDto.Ocupantes,
-                Tarifa = villageDto.Tarifa,
-                MetrosCuadros = villageDto.MetrosCuadros
+            Village modelo = _mapper.Map<Village>(villageDto);
 
-                //Creacion de modelo tipo Village, para actualizar finalmente en la tabla real, luego de pasar el patchoDto ApplyTo 
-            };
 
             _context.Villages.Update(modelo);
-            _context.SaveChanges();
+             await  _context.SaveChangesAsync();
             return NoContent();
 
         }
@@ -217,10 +179,11 @@ namespace MagicVillageAPI.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public IActionResult DeleteVillage(int id)
+        public async Task< IActionResult> DeleteVillage(int id)
         {
 
-            //El IActionResult, no necesita el modelo, Delete devuelve un "No content".       
+            //El IActionResult, no necesita el modelo, Delete devuelve un "No content".
+            //Delete no es un metodo asyncrono
 
             if (id == 0)
             {
@@ -234,7 +197,7 @@ namespace MagicVillageAPI.Controllers
             }
 
             _context.Villages.Remove(village);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
             return NoContent();
         }
 

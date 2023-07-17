@@ -2,8 +2,9 @@
 
 namespace MagicVillageAPI.Models.Dto
 {
-    public class VillageDto
+    public class VillageUpdateDto
     {
+
         public int Id { get; set; }
 
         [Required]

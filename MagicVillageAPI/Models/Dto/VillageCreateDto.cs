@@ -2,9 +2,8 @@
 
 namespace MagicVillageAPI.Models.Dto
 {
-    public class VillageDto
+    public class VillageCreateDto
     {
-        public int Id { get; set; }
 
         [Required]
         [MaxLength(30)]

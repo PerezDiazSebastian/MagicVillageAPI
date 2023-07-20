@@ -1,0 +1,9 @@
+CREATE TABLE NumeroVillas(
+VillaNum int primary key not null,
+VillaId int not null,
+DetalleEspecial nvarchar(max) not null,
+FechaCreacion datetime2(7) not null,
+FechaActualizacion datetime2(7) not null,
+    CONSTRAINT FK_NumeroVillas FOREIGN KEY (VillaId)
+    REFERENCES Villages(Id)
+);
